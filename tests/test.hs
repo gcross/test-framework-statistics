@@ -16,8 +16,11 @@ import Debug.Trace
 import Statistics.Distribution
 import Statistics.Distribution.Normal
 
+import System.Random
+
 import Test.HUnit
 import Test.Framework
+import Test.Framework.Providers.AntiTest
 import Test.Framework.Providers.HUnit
 import Test.Framework.Providers.QuickCheck2
 import Test.Framework.Providers.Statistics
@@ -46,6 +49,19 @@ main = defaultMain
                 variance_ = 1 / fromIntegral number_of_tests
             in cumulative (fromParams 0 variance_) (-(mean_threshold+0.001)) < probability_threshold
     -- @-node:gcross.20100107191635.1614:computeTestCountForThresholds
+    -- @+node:gcross.20100107191635.1856:testBinomial
+    ,testGroup "testBinomial" $
+        -- @    @+others
+        -- @+node:gcross.20100107191635.1858:mean = p = 0.5
+        [testBinomial "mean = p = 0.5" 0.5 0.1 0.001 randomIO
+        -- @nonl
+        -- @-node:gcross.20100107191635.1858:mean = p = 0.5
+        -- @+node:gcross.20100107191635.1860:mean = p = 0.5
+        ,antiTest $ testBinomial "mean 0.4, p = 0.5" 0.4 0.1 0.001 randomIO
+        -- @-node:gcross.20100107191635.1860:mean = p = 0.5
+        -- @-others
+        ]
+    -- @-node:gcross.20100107191635.1856:testBinomial
     -- @-others
     -- @-node:gcross.20100107191635.1611:<< Tests >>
     -- @nl

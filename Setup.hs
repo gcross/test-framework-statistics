@@ -14,6 +14,7 @@ main =
          ,"test-framework == 0.2.*"
          ,"test-framework-hunit == 0.2.*"
          ,"test-framework-quickcheck2 == 0.2.*"
+         ,"test-framework-antitest >= 0.1"
          ,"QuickCheck == 2.1.*"
          ]
         ))
