@@ -102,8 +102,8 @@ computeTestCountForThresholds mean_threshold probability_threshold =
 -- @-node:gcross.20100107114651.1466:Functions
 -- @+node:gcross.20100107114651.1474:Interface
 -- @+node:gcross.20100107114651.1469:testBinomial
-testBinomial :: String -> Int -> Double -> Double -> IO Bool -> Test
-testBinomial name number_of_tests probability_of_True minimum_probability_threshold generator =
+testBinomial :: String -> Double -> Double -> Double -> IO Bool -> Test
+testBinomial name probability_of_True mean_threshold minimum_probability_threshold generator =
     Test name $
         TestCase
         {   testCount          = number_of_tests
@@ -129,6 +129,8 @@ testBinomial name number_of_tests probability_of_True minimum_probability_thresh
                                 minimum_probability_threshold
                     else TestOK
         }
+  where
+    number_of_tests = computeTestCountForThresholds mean_threshold minimum_probability_threshold
 -- @-node:gcross.20100107114651.1469:testBinomial
 -- @-node:gcross.20100107114651.1474:Interface
 -- @-others
