@@ -99,6 +99,28 @@ computeTestCountForThresholds mean_threshold probability_threshold =
             in sqrt_multipler * sqrt_multipler
 
 -- @-node:gcross.20100107191635.1612:computeTestCountForThresholds
+-- @+node:gcross.20100107191635.1861:computeKolmogorovProbability
+computeKolmogorovProbability :: Double -> Double
+computeKolmogorovProbability z
+   | u < 0.2
+      = 1
+   | u < 0.755
+      = 1 - w * (exp(c1/v)+exp(c2/v)+exp(c3/v))/u
+   | u < 6.8116
+      = 2 * sum [ sign * exp(coef*v)
+                | (sign,coef) <- take (1 `max` round (3/u)) coefs
+                ]
+   | otherwise
+      = 0
+  where
+    u = abs z
+    v = u*u
+    w = 2.50662827
+    c1 = -pi**2/8
+    c2 = 9*c1
+    c3 = 25*c1
+    coefs = [(1,-2),(-1,-8),(1,-18),(-1,-32)]
+-- @-node:gcross.20100107191635.1861:computeKolmogorovProbability
 -- @-node:gcross.20100107114651.1466:Functions
 -- @+node:gcross.20100107114651.1474:Interface
 -- @+node:gcross.20100107114651.1469:testBinomial
