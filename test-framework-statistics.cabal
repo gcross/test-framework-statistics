@@ -1,0 +1,16 @@
+-- @+leo-ver=4-thin
+-- @+node:gcross.20100107191635.1409:@thin test-framework-statistics.cabal
+-- @@language Haskell
+Name:           test-framework-statistics
+Version:        0.1
+Cabal-Version:  >= 1.6
+Build-Type:     Custom
+
+Library
+    Build-Depends:  base == 4.1.*,
+                    statistics == 0.4.1.*,
+                    Blueprint >= 0.2,
+                    random == 1.*,
+                    test-framework == 0.2.*
+-- @-node:gcross.20100107191635.1409:@thin test-framework-statistics.cabal
+-- @-leo
