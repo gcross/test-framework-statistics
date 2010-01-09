@@ -9,10 +9,16 @@
 -- @-node:gcross.20100107114651.1477:<< Language extensions >>
 -- @nl
 
-module Test.Framework.Providers.Statistics (testBinomial,computeTestCountForThresholds) where
+module Test.Framework.Providers.Statistics
+        (testBinomial
+        ,testDistribution
+        ,computeTestCountForThresholds
+        ) where
 
 -- @<< Import needed modules >>
 -- @+node:gcross.20100107114651.1460:<< Import needed modules >>
+import Data.List
+
 import Debug.Trace
 
 import Test.Framework.Providers.API
@@ -121,6 +127,27 @@ computeKolmogorovProbability z
     c3 = 25*c1
     coefs = [(1,-2),(-1,-8),(1,-18),(-1,-32)]
 -- @-node:gcross.20100107191635.1861:computeKolmogorovProbability
+-- @+node:gcross.20100109130159.1282:computeKolmogorovDistanceFromExact
+computeKolmogorovDistanceFromExact :: (Double -> Double) -> [Double] -> Double
+computeKolmogorovDistanceFromExact computeExactCumulative samples =
+    go increment_fraction sorted_samples 0
+  where
+    sorted_samples = sort samples
+    increment_fraction = 1 / fromIntegral (length samples)
+    go _ [] maximum_distance = maximum_distance
+    go current_fraction (sample:rest_samples) maximum_distance =
+        go (current_fraction+increment_fraction)
+           rest_samples
+           (maximum_distance `max` abs (current_fraction - computeExactCumulative sample))
+-- @-node:gcross.20100109130159.1282:computeKolmogorovDistanceFromExact
+-- @+node:gcross.20100109130159.1284:computeKolmogorovStatisticFromExact
+computeKolmogorovStatisticFromExact :: (Double -> Double) -> [Double] -> Double
+computeKolmogorovStatisticFromExact computeExactCumulative samples =
+    computeKolmogorovProbability (sqrt_number_of_samples*distance)
+  where
+    sqrt_number_of_samples = sqrt . fromIntegral . length $ samples
+    distance = computeKolmogorovDistanceFromExact computeExactCumulative samples
+-- @-node:gcross.20100109130159.1284:computeKolmogorovStatisticFromExact
 -- @-node:gcross.20100107114651.1466:Functions
 -- @+node:gcross.20100107114651.1474:Interface
 -- @+node:gcross.20100107114651.1469:testBinomial
@@ -154,6 +181,25 @@ testBinomial name probability_of_True mean_threshold minimum_probability_thresho
   where
     number_of_tests = computeTestCountForThresholds mean_threshold minimum_probability_threshold
 -- @-node:gcross.20100107114651.1469:testBinomial
+-- @+node:gcross.20100109130159.1286:testDistribution
+testDistribution :: String -> (Double -> Double) -> Int -> Double -> IO Double -> Test
+testDistribution name computeExactCumulative number_of_tests minimum_probability_threshold generator =
+    Test name $
+        TestCase
+        {   testCount          = number_of_tests
+        ,   testDataGenerator  = generator
+        ,   testDataSeed       = [] :: [Double]
+        ,   testDataProcessor  = flip (:)
+        ,   testDataSummarizer = \samples -> TestResult $
+                let statistic = computeKolmogorovStatisticFromExact computeExactCumulative samples
+                in if statistic < minimum_probability_threshold
+                    then TestFailure $
+                            printf "Computed Kolmogorov statistic was %f < %f."
+                                statistic
+                                minimum_probability_threshold
+                    else TestOK
+        }
+-- @-node:gcross.20100109130159.1286:testDistribution
 -- @-node:gcross.20100107114651.1474:Interface
 -- @-others
 -- @-node:gcross.20100107191635.1412:@thin sources/Test/Framework/Providers/Statistics.hs

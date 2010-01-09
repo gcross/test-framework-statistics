@@ -62,6 +62,20 @@ main = defaultMain
         -- @-others
         ]
     -- @-node:gcross.20100107191635.1856:testBinomial
+    -- @+node:gcross.20100109130159.1287:testDistribution
+    ,testGroup "testDistribution" $
+        -- @    @+others
+        -- @+node:gcross.20100109130159.1288:uniform / almost uniform
+        [testDistribution "uniform" id 1000 0.001 randomIO
+        ,antiTest $ testDistribution "almost uniform" (\x -> x**1.1) 10000 0.001 randomIO
+        -- @-node:gcross.20100109130159.1288:uniform / almost uniform
+        -- @+node:gcross.20100109130159.1290:linear / almost linear
+        ,testDistribution "linear" (\x -> x*x) 1000 0.001 (fmap sqrt randomIO)
+        ,antiTest $ testDistribution "almost linear" (\x -> x**2.1) 10000 0.001 (fmap sqrt randomIO)
+        -- @-node:gcross.20100109130159.1290:linear / almost linear
+        -- @-others
+        ]
+    -- @-node:gcross.20100109130159.1287:testDistribution
     -- @-others
     -- @-node:gcross.20100107191635.1611:<< Tests >>
     -- @nl
