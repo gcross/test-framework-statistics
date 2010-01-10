@@ -16,6 +16,7 @@ main =
          ,"test-framework-quickcheck2 == 0.2.*"
          ,"test-framework-antitest >= 0.1"
          ,"QuickCheck == 2.1.*"
+         ,"mersenne-random == 1.*"
          ]
         ))
         []

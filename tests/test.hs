@@ -11,12 +11,14 @@
 
 -- @<< Import needed modules >>
 -- @+node:gcross.20100107191635.1521:<< Import needed modules >>
+import Control.Arrow
+
 import Debug.Trace
 
 import Statistics.Distribution
 import Statistics.Distribution.Normal
 
-import System.Random
+import System.Random.Mersenne
 
 import Test.HUnit
 import Test.Framework
@@ -33,6 +35,16 @@ import Test.QuickCheck
 -- @+node:gcross.20100107191635.1778:echo
 echo x = trace (show x) x
 -- @-node:gcross.20100107191635.1778:echo
+-- @+node:gcross.20100109140101.1522:metropolisStep
+metropolisStep :: IO Double -> (Double -> Double) -> Double -> IO Double
+metropolisStep generateNextStep computeDensity previous_step = do
+    proposed_step <- generateNextStep
+    toss <- randomIO
+    return $
+        if toss < computeDensity proposed_step / computeDensity previous_step
+            then proposed_step
+            else previous_step
+-- @-node:gcross.20100109140101.1522:metropolisStep
 -- @-node:gcross.20100107191635.1777:Functions
 -- @-others
 
@@ -49,19 +61,19 @@ main = defaultMain
                 variance_ = 1 / fromIntegral number_of_tests
             in cumulative (fromParams 0 variance_) (-(mean_threshold+0.001)) < probability_threshold
     -- @-node:gcross.20100107191635.1614:computeTestCountForThresholds
-    -- @+node:gcross.20100107191635.1856:testBinomial
-    ,testGroup "testBinomial" $
+    -- @+node:gcross.20100107191635.1856:testBernoulli
+    ,testGroup "testBernoulli" $
         -- @    @+others
         -- @+node:gcross.20100107191635.1858:mean = p = 0.5
-        [testBinomial "mean = p = 0.5" 0.5 0.1 0.001 randomIO
+        [testBernoulli "mean = p = 0.5" 0.5 0.1 0.001 randomIO
         -- @nonl
         -- @-node:gcross.20100107191635.1858:mean = p = 0.5
         -- @+node:gcross.20100107191635.1860:mean = p = 0.5
-        ,antiTest $ testBinomial "mean 0.4, p = 0.5" 0.4 0.1 0.001 randomIO
+        ,antiTest $ testBernoulli "mean 0.4, p = 0.5" 0.4 0.1 0.001 randomIO
         -- @-node:gcross.20100107191635.1860:mean = p = 0.5
         -- @-others
         ]
-    -- @-node:gcross.20100107191635.1856:testBinomial
+    -- @-node:gcross.20100107191635.1856:testBernoulli
     -- @+node:gcross.20100109130159.1287:testDistribution
     ,testGroup "testDistribution" $
         -- @    @+others
@@ -71,11 +83,25 @@ main = defaultMain
         -- @-node:gcross.20100109130159.1288:uniform / almost uniform
         -- @+node:gcross.20100109130159.1290:linear / almost linear
         ,testDistribution "linear" (\x -> x*x) 1000 0.001 (fmap sqrt randomIO)
-        ,antiTest $ testDistribution "almost linear" (\x -> x**2.1) 10000 0.001 (fmap sqrt randomIO)
+        ,antiTest $ testDistribution "almost linear" (\x -> x**2.1) 20000 0.001 (fmap sqrt randomIO)
         -- @-node:gcross.20100109130159.1290:linear / almost linear
         -- @-others
         ]
     -- @-node:gcross.20100109130159.1287:testDistribution
+    -- @+node:gcross.20100109140101.1523:testWalkDistribution
+    ,testGroup "testWalkDistribution" $
+        -- @    @+others
+        -- @+node:gcross.20100109140101.1525:linear / almost linear
+        [testWalkDistribution "linear" (\x -> x*x) 10000 0.001 (return 1) (fmap (id &&& id) . metropolisStep randomIO id)
+        ,antiTest $ testWalkDistribution "almost linear" (\x -> x**2.1) 20000 0.001 (return 1) (fmap (id &&& id) . metropolisStep randomIO id)
+        -- @-node:gcross.20100109140101.1525:linear / almost linear
+        -- @+node:gcross.20100109140101.1527:quadratic / almost quadratic
+        ,testWalkDistribution "quadratic" (\x -> x*x*x) 10000 0.001 (return 1) (fmap (id &&& id) . metropolisStep randomIO (\x -> x*x))
+        ,antiTest $ testWalkDistribution "almost quadratic" (\x -> x**3.1) 40000 0.01 (return 1) (fmap (id &&& id) . metropolisStep randomIO (\x -> x*x))
+        -- @-node:gcross.20100109140101.1527:quadratic / almost quadratic
+        -- @-others
+        ]
+    -- @-node:gcross.20100109140101.1523:testWalkDistribution
     -- @-others
     -- @-node:gcross.20100107191635.1611:<< Tests >>
     -- @nl

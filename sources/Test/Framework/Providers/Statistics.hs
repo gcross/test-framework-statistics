@@ -10,13 +10,16 @@
 -- @nl
 
 module Test.Framework.Providers.Statistics
-        (testBinomial
+        (testBernoulli
         ,testDistribution
+        ,testWalkDistribution
         ,computeTestCountForThresholds
         ) where
 
 -- @<< Import needed modules >>
 -- @+node:gcross.20100107114651.1460:<< Import needed modules >>
+import Control.Arrow
+
 import Data.List
 
 import Debug.Trace
@@ -64,26 +67,29 @@ instance TestResultlike TestRunning TestResult where
 data TestCase datum accumulator =
     TestCase
     {   testCount          :: Int
-    ,   testDataGenerator  :: IO datum
+    ,   testDataGenerator  :: TestDataGenerator datum
     ,   testDataSeed       :: accumulator
-    ,   testDataProcessor  :: accumulator -> datum -> accumulator
+    ,   testDataProcessor  :: datum -> accumulator -> accumulator
     ,   testDataSummarizer :: accumulator -> TestResult
     }
 
 instance Testlike TestRunning TestResult (TestCase datum accumulator) where
     testTypeName _ = "Statistical Tests"
-    runTest options test_case = runImprovingIO $ go number_of_points (testDataSeed test_case)
+    runTest options test_case = runImprovingIO $ go number_of_points (testDataGenerator test_case) (testDataSeed test_case)
       where
         number_of_points = testCount test_case
-        go :: Int -> accumulator -> ImprovingIO TestRunning TestResult TestResult
-        go 0 accum = return $ testDataSummarizer test_case accum
-        go n accum =
+        go :: Int -> TestDataGenerator datum -> accumulator -> ImprovingIO TestRunning TestResult TestResult
+        go 0 _ accum = return $ testDataSummarizer test_case accum
+        go n (TestDataGenerator generator) accum = do
             yieldImprovement (TestRunning (number_of_points-n,number_of_points))
-            >>
-            liftIO (testDataGenerator test_case)
-            >>=
-            (go (n-1) . testDataProcessor test_case accum)
+            (datum, next_generator) <- liftIO generator
+            let next_accum :: accumulator
+                next_accum = testDataProcessor test_case datum accum
+            go (n-1) next_generator next_accum
 -- @-node:gcross.20100107114651.1465:TestCase
+-- @+node:gcross.20100109140101.1520:TestDataGenerator
+newtype TestDataGenerator datum = TestDataGenerator { unwrapTestDataGenerator :: IO (datum, TestDataGenerator datum) }
+-- @-node:gcross.20100109140101.1520:TestDataGenerator
 -- @-node:gcross.20100107114651.1461:Types
 -- @+node:gcross.20100107114651.1466:Functions
 -- @+node:gcross.20100107114651.1467:computeChebychevBound
@@ -148,17 +154,22 @@ computeKolmogorovStatisticFromExact computeExactCumulative samples =
     sqrt_number_of_samples = sqrt . fromIntegral . length $ samples
     distance = computeKolmogorovDistanceFromExact computeExactCumulative samples
 -- @-node:gcross.20100109130159.1284:computeKolmogorovStatisticFromExact
+-- @+node:gcross.20100109140101.1521:independentGenerator
+independentGenerator :: IO datum -> TestDataGenerator datum
+independentGenerator generator = wrapped_generator
+  where wrapped_generator = TestDataGenerator $ fmap (\x -> (x,wrapped_generator)) generator
+-- @-node:gcross.20100109140101.1521:independentGenerator
 -- @-node:gcross.20100107114651.1466:Functions
 -- @+node:gcross.20100107114651.1474:Interface
--- @+node:gcross.20100107114651.1469:testBinomial
-testBinomial :: String -> Double -> Double -> Double -> IO Bool -> Test
-testBinomial name probability_of_True mean_threshold minimum_probability_threshold generator =
+-- @+node:gcross.20100107114651.1469:testBernoulli
+testBernoulli :: String -> Double -> Double -> Double -> IO Bool -> Test
+testBernoulli name probability_of_True mean_threshold minimum_probability_threshold generator =
     Test name $
         TestCase
         {   testCount          = number_of_tests
-        ,   testDataGenerator  = generator
+        ,   testDataGenerator  = independentGenerator generator
         ,   testDataSeed       = 0 :: Int
-        ,   testDataProcessor  = \count result -> if result then count+1 else count
+        ,   testDataProcessor  = \result -> if result then (+1) else id
         ,   testDataSummarizer = \count ->
                 let mean_ = (fromIntegral number_of_tests * probability_of_True)
                     variance_ = mean_ * (1-probability_of_True)
@@ -180,16 +191,16 @@ testBinomial name probability_of_True mean_threshold minimum_probability_thresho
         }
   where
     number_of_tests = computeTestCountForThresholds mean_threshold minimum_probability_threshold
--- @-node:gcross.20100107114651.1469:testBinomial
--- @+node:gcross.20100109130159.1286:testDistribution
+-- @-node:gcross.20100107114651.1469:testBernoulli
+-- @+node:gcross.20100109140101.1519:testDistribution
 testDistribution :: String -> (Double -> Double) -> Int -> Double -> IO Double -> Test
 testDistribution name computeExactCumulative number_of_tests minimum_probability_threshold generator =
     Test name $
         TestCase
         {   testCount          = number_of_tests
-        ,   testDataGenerator  = generator
+        ,   testDataGenerator  = independentGenerator generator
         ,   testDataSeed       = [] :: [Double]
-        ,   testDataProcessor  = flip (:)
+        ,   testDataProcessor  = (:)
         ,   testDataSummarizer = \samples -> TestResult $
                 let statistic = computeKolmogorovStatisticFromExact computeExactCumulative samples
                 in if statistic < minimum_probability_threshold
@@ -199,7 +210,28 @@ testDistribution name computeExactCumulative number_of_tests minimum_probability
                                 minimum_probability_threshold
                     else TestOK
         }
--- @-node:gcross.20100109130159.1286:testDistribution
+-- @-node:gcross.20100109140101.1519:testDistribution
+-- @+node:gcross.20100109130159.1286:testWalkDistribution
+testWalkDistribution :: String -> (Double -> Double) -> Int -> Double -> IO a -> (a -> IO (Double,a)) -> Test
+testWalkDistribution name computeExactCumulative number_of_tests minimum_probability_threshold makeSeed generator =
+    Test name $
+        TestCase
+        {   testCount          = number_of_tests
+        ,   testDataGenerator  = TestDataGenerator $ makeSeed >>= data_generator
+        ,   testDataSeed       = [] :: [Double]
+        ,   testDataProcessor  = (:)
+        ,   testDataSummarizer = \samples -> TestResult $
+                let statistic = computeKolmogorovStatisticFromExact computeExactCumulative samples
+                in if statistic < minimum_probability_threshold
+                    then TestFailure $
+                            printf "Computed Kolmogorov statistic was %f < %f."
+                                statistic
+                                minimum_probability_threshold
+                    else TestOK
+        }
+  where
+    data_generator = fmap (second (TestDataGenerator . data_generator)) . generator
+-- @-node:gcross.20100109130159.1286:testWalkDistribution
 -- @-node:gcross.20100107114651.1474:Interface
 -- @-others
 -- @-node:gcross.20100107191635.1412:@thin sources/Test/Framework/Providers/Statistics.hs
