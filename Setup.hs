@@ -17,6 +17,7 @@ main =
          ,"test-framework-antitest >= 0.1"
          ,"QuickCheck == 2.1.*"
          ,"mersenne-random == 1.*"
+         ,"erf == 1.*"
          ]
         ))
         []

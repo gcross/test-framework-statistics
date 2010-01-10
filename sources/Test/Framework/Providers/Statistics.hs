@@ -6,6 +6,7 @@
 -- @+node:gcross.20100107114651.1477:<< Language extensions >>
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE BangPatterns #-}
 -- @-node:gcross.20100107114651.1477:<< Language extensions >>
 -- @nl
 
@@ -22,14 +23,16 @@ import Control.Arrow
 
 import Data.List
 
-import Debug.Trace
-
 import Test.Framework.Providers.API
 
 import Text.Printf
 
 import Statistics.Distribution
 import Statistics.Distribution.Normal
+
+import Debug.Trace
+import System.IO.Unsafe
+-- @nonl
 -- @-node:gcross.20100107114651.1460:<< Import needed modules >>
 -- @nl
 
@@ -79,13 +82,11 @@ instance Testlike TestRunning TestResult (TestCase datum accumulator) where
       where
         number_of_points = testCount test_case
         go :: Int -> TestDataGenerator datum -> accumulator -> ImprovingIO TestRunning TestResult TestResult
-        go 0 _ accum = return $ testDataSummarizer test_case accum
-        go n (TestDataGenerator generator) accum = do
+        go 0 _ !accum = return $ testDataSummarizer test_case accum
+        go n (!TestDataGenerator generator) !accum = do
             yieldImprovement (TestRunning (number_of_points-n,number_of_points))
             (datum, next_generator) <- liftIO generator
-            let next_accum :: accumulator
-                next_accum = testDataProcessor test_case datum accum
-            go (n-1) next_generator next_accum
+            go (n-1) next_generator $ testDataProcessor test_case datum accum
 -- @-node:gcross.20100107114651.1465:TestCase
 -- @+node:gcross.20100109140101.1520:TestDataGenerator
 newtype TestDataGenerator datum = TestDataGenerator { unwrapTestDataGenerator :: IO (datum, TestDataGenerator datum) }
@@ -136,12 +137,11 @@ computeKolmogorovProbability z
 -- @+node:gcross.20100109130159.1282:computeKolmogorovDistanceFromExact
 computeKolmogorovDistanceFromExact :: (Double -> Double) -> [Double] -> Double
 computeKolmogorovDistanceFromExact computeExactCumulative samples =
-    go increment_fraction sorted_samples 0
+    go increment_fraction (sort samples) 0
   where
-    sorted_samples = sort samples
     increment_fraction = 1 / fromIntegral (length samples)
-    go _ [] maximum_distance = maximum_distance
-    go current_fraction (sample:rest_samples) maximum_distance =
+    go _ [] !maximum_distance = maximum_distance
+    go !current_fraction (sample:rest_samples) !maximum_distance =
         go (current_fraction+increment_fraction)
            rest_samples
            (maximum_distance `max` abs (current_fraction - computeExactCumulative sample))
@@ -200,7 +200,7 @@ testDistribution name computeExactCumulative number_of_tests minimum_probability
         {   testCount          = number_of_tests
         ,   testDataGenerator  = independentGenerator generator
         ,   testDataSeed       = [] :: [Double]
-        ,   testDataProcessor  = (:)
+        ,   testDataProcessor  = \(!sample) (!previous_samples) -> sample:previous_samples
         ,   testDataSummarizer = \samples -> TestResult $
                 let statistic = computeKolmogorovStatisticFromExact computeExactCumulative samples
                 in if statistic < minimum_probability_threshold
@@ -219,9 +219,9 @@ testWalkDistribution name computeExactCumulative number_of_tests minimum_probabi
         {   testCount          = number_of_tests
         ,   testDataGenerator  = TestDataGenerator $ makeSeed >>= data_generator
         ,   testDataSeed       = [] :: [Double]
-        ,   testDataProcessor  = (:)
+        ,   testDataProcessor  = \(!sample) (!previous_samples) -> sample:previous_samples
         ,   testDataSummarizer = \samples -> TestResult $
-                let statistic = computeKolmogorovStatisticFromExact computeExactCumulative samples
+                let statistic = trace "summarizing" $ computeKolmogorovStatisticFromExact computeExactCumulative samples
                 in if statistic < minimum_probability_threshold
                     then TestFailure $
                             printf "Computed Kolmogorov statistic was %f < %f."
